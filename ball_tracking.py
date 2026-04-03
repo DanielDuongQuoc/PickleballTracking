@@ -66,13 +66,12 @@ class BallTracker:
         predicted_points = []   # trail bóng (tối đa 10 điểm)
         bounce_detected = False
         last_bounce_frame = -30
-        in_out_label = ""       # "IN" hoặc "OUT" – hiển thị liên tục theo vị trí bóng
-        in_out_timer = 0        # số frame còn hiển thị nhãn in/out sau bounce
+        current_in_out = ""    # "IN" hoặc "OUT" – cập nhật mỗi frame theo vị trí bóng
+        in_out_label = ""       # nhãn IN/OUT tại thời điểm bounce (để log)
 
         # FIX #1: khởi tạo next_point trước vòng lặp để tránh NameError
         next_point = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         detected = False
-        current_in_out = ""     # trạng thái IN/OUT hiện tại theo vị trí bóng
 
         # Accumulate rows, build DataFrame once at the end
         rows = []
@@ -162,7 +161,7 @@ class BallTracker:
                         last_bounce_frame = frame_num
                         print(f"[Frame {frame_num}] Bounce detected!")
 
-                        # Kiểm tra IN / OUT ngay tại điểm bounce
+                        # Ghi log IN/OUT tại điểm bounce
                         ball_centroid = (next_point[0], next_point[1])
                         if poly_path.contains_point(ball_centroid):
                             in_out_label = "IN"
@@ -170,14 +169,12 @@ class BallTracker:
                         else:
                             in_out_label = "OUT"
                             print("The ball is OUT.")
-                        in_out_timer = 90  # hiển thị nhãn bounce trong 90 frame
 
                     # Reset bounce_detected khi vy đổi chiều trở lại
-                    # (bóng đi xuống sau khi đã bật lên)
                     if bounce_detected and curr_vy > 0:
                         bounce_detected = False
 
-                    # ── Kiểm tra IN/OUT liên tục theo vị trí bóng ──
+                    # ── Kiểm tra IN/OUT LIÊN TỤC theo vị trí bóng ──
                     ball_centroid = (next_point[0], next_point[1])
                     if poly_path.contains_point(ball_centroid):
                         current_in_out = "IN"
@@ -187,11 +184,7 @@ class BallTracker:
                     # ── Vẽ ─────────────────────────────────────────
                     self._draw(frame, cx, cy, next_point,
                                predicted_points, frame_num,
-                               bounce_detected, in_out_label, in_out_timer,
-                               current_in_out)
-
-                    if in_out_timer > 0:
-                        in_out_timer -= 1
+                               bounce_detected, current_in_out)
 
             # ── Luôn ghi frame dù có detect hay không ──────────────
             out.write(frame)
@@ -247,16 +240,15 @@ class BallTracker:
     # ── Helper vẽ overlay ────────────────────────────────────────────
     def _draw(self, frame, cx, cy, next_point,
               predicted_points, frame_num,
-              bounce_detected, in_out_label, in_out_timer,
-              current_in_out=""):
+              bounce_detected, current_in_out):
         """Vẽ tất cả overlay lên frame."""
         h, w = frame.shape[:2]
 
-        # Vẽ vùng sân (polygon) – dày hơn, màu nổi bật
+        # Vẽ vùng sân (polygon)
         pts = np.array(self.points, dtype=np.int32).reshape((-1, 1, 2))
         cv2.polylines(frame, [pts], isClosed=True, color=(0, 255, 255), thickness=3)
 
-        # Trail bóng (màu gradient trắng → vàng)
+        # Trail bóng (màu gradient cam → vàng)
         n = len(predicted_points)
         for i, p in enumerate(predicted_points):
             alpha = int(255 * (i + 1) / n)
@@ -264,7 +256,7 @@ class BallTracker:
             radius = max(2, int(5 * (i + 1) / n))
             cv2.circle(frame, p, radius, color, -1)
 
-        # Vị trí detect (đỏ) và vị trí Kalman predict (xanh dương)
+        # Vị trí detect (đỏ) và Kalman predict (xanh dương)
         cv2.circle(frame, (cx, cy), 6, (0, 0, 255), -1)
         cv2.circle(frame, (int(next_point[0]), int(next_point[1])), 8, (255, 100, 0), 2)
 
@@ -274,63 +266,34 @@ class BallTracker:
         cv2.putText(frame, f'VY: {next_point[3]:.1f}',
                     (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
 
-        # ── Bounce ──────────────────────────────────────────────────
+        # Bounce
         if bounce_detected:
             cv2.putText(frame, 'BOUNCE!',
                         (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
 
-        # ── IN/OUT liên tục (góc trên phải) ─────────────────────────
-        # Hiển thị trạng thái IN/OUT theo vị trí bóng hiện tại
+        # ── IN / OUT liên tục – góc trên phải, to và rõ ──────────────
         if current_in_out:
-            label     = current_in_out
-            is_in     = (label == "IN")
-            txt_color = (0, 230, 0) if is_in else (0, 0, 255)     # xanh lá / đỏ
-            bg_color  = (0, 60, 0)  if is_in else (0, 0, 80)      # nền tối tương ứng
+            is_in      = (current_in_out == "IN")
+            txt_color  = (0, 220, 0)   if is_in else (0, 0, 255)   # xanh lá / đỏ
+            bg_color   = (0, 50, 0)    if is_in else (0, 0, 60)    # nền tối tương ứng
+            bdr_color  = (0, 255, 60)  if is_in else (60, 60, 255) # viền sáng
 
             font       = cv2.FONT_HERSHEY_DUPLEX
-            font_scale = 2.5
-            thickness  = 5
-            (tw, th), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+            scale      = 3.0
+            thick      = 6
+            (tw, th), base = cv2.getTextSize(current_in_out, font, scale, thick)
 
-            # Vẽ nền bo góc ở góc trên phải
-            pad    = 18
-            x1     = w - tw - pad * 2 - 10
-            y1     = 10
-            x2     = w - 10
-            y2     = th + pad * 2 + 10
+            pad = 20
+            x1  = w - tw - pad * 2 - 10
+            y1  = 10
+            x2  = w - 10
+            y2  = th + pad * 2 + 10
+
+            # Nền đặc
             cv2.rectangle(frame, (x1, y1), (x2, y2), bg_color, -1)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), txt_color, 3)  # viền màu
-
-            # Vẽ chữ IN hoặc OUT
-            cv2.putText(frame, label,
-                        (x1 + pad, y2 - pad - baseline),
-                        font, font_scale, txt_color, thickness, cv2.LINE_AA)
-
-        # ── Nhãn IN/OUT sau bounce (to, nổi bật, giữa màn hình) ─────
-        if in_out_timer > 0:
-            label     = in_out_label
-            is_in     = (label == "IN")
-            txt_color = (0, 255, 80)  if is_in else (0, 60, 255)
-            bg_color  = (0, 80, 0)   if is_in else (60, 0, 0)
-
-            font       = cv2.FONT_HERSHEY_DUPLEX
-            font_scale = 4.0
-            thickness  = 8
-            (tw, th), baseline = cv2.getTextSize(label, font, font_scale, thickness)
-
-            # Căn giữa theo chiều ngang
-            cx_text = (w - tw) // 2
-            cy_text = h // 2
-
-            pad = 24
-            cv2.rectangle(frame,
-                          (cx_text - pad, cy_text - th - pad),
-                          (cx_text + tw + pad, cy_text + baseline + pad),
-                          bg_color, -1)
-            cv2.rectangle(frame,
-                          (cx_text - pad, cy_text - th - pad),
-                          (cx_text + tw + pad, cy_text + baseline + pad),
-                          txt_color, 4)
-            cv2.putText(frame, label,
-                        (cx_text, cy_text),
-                        font, font_scale, txt_color, thickness, cv2.LINE_AA)
+            # Viền nổi bật
+            cv2.rectangle(frame, (x1, y1), (x2, y2), bdr_color, 4)
+            # Chữ IN / OUT
+            cv2.putText(frame, current_in_out,
+                        (x1 + pad, y2 - pad - base),
+                        font, scale, txt_color, thick, cv2.LINE_AA)
