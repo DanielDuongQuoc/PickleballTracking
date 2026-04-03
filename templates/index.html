@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PickleballTracking – AI Ball Tracking System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Variables ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #080c14;
+      --surface:    #0d1421;
+      --surface2:   #111a2e;
+      --border:     rgba(255,255,255,.07);
+      --primary:    #00e676;
+      --primary-d:  #00b359;
+      --accent:     #ffe600;
+      --text:       #e2e8f0;
+      --muted:      #64748b;
+      --danger:     #ff4b4b;
+      --info:       #38bdf8;
+      --glow:       rgba(0,230,118,.25);
+      --radius:     16px;
+      --font:       'Inter', sans-serif;
+      --mono:       'JetBrains Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated Background ───────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: -1;
+      background:
+        radial-gradient(ellipse 60% 40% at 20% 10%, rgba(0,230,118,.12) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 35% at 80% 80%, rgba(56,189,248,.09) 0%, transparent 60%),
+        radial-gradient(ellipse 80% 60% at 50% 50%, rgba(17,26,46,.8) 0%, transparent 100%);
+      pointer-events: none;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    header {
+      padding: 24px 40px;
+      display: flex; align-items: center; gap: 16px;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(8,12,20,.85);
+    }
+
+    .logo {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-d));
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    header h1 {
+      font-size: 1.35rem; font-weight: 700;
+      background: linear-gradient(90deg, #fff 0%, var(--primary) 100%);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    header p { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+
+    .badge {
+      margin-left: auto;
+      background: rgba(0,230,118,.12);
+      border: 1px solid rgba(0,230,118,.3);
+      color: var(--primary);
+      padding: 4px 12px; border-radius: 20px;
+      font-size: .72rem; font-weight: 600; letter-spacing: .05em;
+    }
+
+    /* ── Stepper ─────────────────────────────────────────────────── */
+    .stepper {
+      display: flex; justify-content: center; gap: 0;
+      padding: 32px 40px 0;
+    }
+
+    .step {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 8px; flex: 1; max-width: 180px; position: relative;
+    }
+
+    .step:not(:last-child)::after {
+      content: '';
+      position: absolute; top: 18px; left: calc(50% + 22px);
+      right: calc(-50% + 22px); height: 2px;
+      background: var(--border);
+      transition: background .4s;
+    }
+
+    .step.done:not(:last-child)::after { background: var(--primary); }
+
+    .step-icon {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .85rem; font-weight: 700; color: var(--muted);
+      transition: all .3s; background: var(--surface);
+    }
+
+    .step.active .step-icon {
+      border-color: var(--primary); color: var(--primary);
+      box-shadow: 0 0 14px var(--glow);
+    }
+
+    .step.done .step-icon {
+      background: var(--primary); border-color: var(--primary);
+      color: #000;
+    }
+
+    .step-label {
+      font-size: .72rem; font-weight: 500; color: var(--muted);
+      text-align: center; transition: color .3s;
+    }
+
+    .step.active .step-label,
+    .step.done  .step-label { color: var(--text); }
+
+    /* ── Main Layout ─────────────────────────────────────────────── */
+    main {
+      max-width: 1100px; margin: 0 auto;
+      padding: 32px 24px 80px;
+    }
+
+    /* ── Cards ───────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin-bottom: 24px;
+      transition: border-color .3s;
+    }
+
+    .card:hover { border-color: rgba(255,255,255,.12); }
+
+    .card h2 {
+      font-size: 1.05rem; font-weight: 700; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 10px;
+    }
+
+    .card h2 .icon { font-size: 1.1rem; }
+
+    .card p.sub { font-size: .82rem; color: var(--muted); margin-bottom: 20px; }
+
+    /* ── Upload Zone ─────────────────────────────────────────────── */
+    #drop-zone {
+      border: 2px dashed rgba(0,230,118,.3);
+      border-radius: var(--radius);
+      padding: 60px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .25s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #drop-zone::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(0,230,118,.04) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    #drop-zone.drag-over {
+      border-color: var(--primary);
+      background: rgba(0,230,118,.06);
+      transform: scale(1.01);
+    }
+
+    #drop-zone .dz-icon { font-size: 3rem; margin-bottom: 12px; }
+
+    #drop-zone h3 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+
+    #drop-zone p { font-size: .82rem; color: var(--muted); }
+
+    #drop-zone .formats {
+      display: flex; justify-content: center; gap: 8px;
+      margin-top: 16px; flex-wrap: wrap;
+    }
+
+    #drop-zone .fmt-chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 3px 10px; border-radius: 20px;
+      font-size: .7rem; color: var(--muted);
+    }
+
+    #file-input { display: none; }
+
+    /* ── Video Info Bar ──────────────────────────────────────────── */
+    #video-info {
+      display: none;
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-top: 16px;
+      display: none;
+      align-items: center; gap: 12px;
+    }
+
+    #video-info.show { display: flex; }
+
+    .vi-thumb {
+      width: 52px; height: 36px; border-radius: 6px;
+      background: #1a2540; object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .vi-name { font-weight: 600; font-size: .9rem; }
+    .vi-meta { font-size: .75rem; color: var(--muted); }
+    .vi-progress-wrap { flex: 1; }
+
+    .upload-bar {
+      height: 4px; background: var(--border); border-radius: 4px;
+      overflow: hidden; margin-top: 6px;
+    }
+
+    .upload-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), #00c853);
+      border-radius: 4px;
+      width: 0;
+      transition: width .15s linear;
+    }
+
+    /* ── Canvas Court Selector ───────────────────────────────────── */
+    #court-wrap {
+      position: relative; display: inline-block;
+      cursor: crosshair; border-radius: 10px;
+      overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.5);
+      max-width: 100%;
+    }
+
+    #court-canvas {
+      display: block;
+      max-width: 100%; height: auto;
+      border-radius: 10px;
+    }
+
+    .court-hint {
+      background: rgba(8,12,20,.85);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: .8rem; color: var(--muted);
+      margin-top: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .dot-list {
+      display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+    }
+
+    .dot-chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 5px 12px; font-size: .78rem;
+      font-family: var(--mono);
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    .dot-color {
+      width: 8px; height: 8px; border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: 10px;
+      font-size: .88rem; font-weight: 600;
+      border: none; cursor: pointer;
+      transition: all .2s; text-decoration: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-d));
+      color: #000;
+      box-shadow: 0 4px 20px var(--glow);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,230,118,.4);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-outline:hover:not(:disabled) {
+      background: var(--surface2);
+    }
+
+    .btn-danger {
+      background: rgba(255,75,75,.15);
+      border: 1px solid rgba(255,75,75,.3);
+      color: var(--danger);
+    }
+
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+
+    /* ── Progress Card ───────────────────────────────────────────── */
+    .prog-ring-wrap {
+      display: flex; align-items: center; gap: 28px;
+      flex-wrap: wrap;
+    }
+
+    .ring-svg { transform: rotate(-90deg); }
+
+    .ring-bg { fill: none; stroke: var(--border); stroke-width: 8; }
+
+    .ring-fill {
+      fill: none;
+      stroke: url(#ringGrad);
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-dasharray: 283;
+      stroke-dashoffset: 283;
+      transition: stroke-dashoffset .5s cubic-bezier(.4,0,.2,1);
+    }
+
+    .ring-label {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; font-weight: 800;
+      font-family: var(--mono);
+    }
+
+    .ring-container {
+      position: relative; width: 100px; height: 100px;
+      flex-shrink: 0;
+    }
+
+    .prog-stats { flex: 1; }
+
+    .prog-msg {
+      font-size: .85rem; color: var(--muted);
+      margin-bottom: 12px; font-family: var(--mono);
+    }
+
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+      margin-top: 16px;
+    }
+
+    .stat-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px;
+      text-align: center;
+    }
+
+    .stat-val { font-size: 1.4rem; font-weight: 800; font-family: var(--mono); }
+    .stat-lbl { font-size: .7rem; color: var(--muted); margin-top: 2px; }
+
+    .prog-bar-wrap {
+      height: 6px; background: var(--border); border-radius: 6px;
+      overflow: hidden; margin-top: 12px;
+    }
+
+    .prog-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), #00c853);
+      border-radius: 6px; width: 0;
+      transition: width .5s linear;
+    }
+
+    /* ── Results ─────────────────────────────────────────────────── */
+    #result-video {
+      width: 100%; border-radius: 12px;
+      background: #000;
+      aspect-ratio: 16/9; object-fit: contain;
+      box-shadow: 0 8px 40px rgba(0,0,0,.6);
+      margin-bottom: 16px;
+    }
+
+    .result-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .dl-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 22px; border-radius: 10px;
+      font-size: .87rem; font-weight: 600;
+      border: 1px solid var(--border);
+      color: var(--text); background: var(--surface2);
+      text-decoration: none; transition: all .2s;
+      cursor: pointer;
+    }
+
+    .dl-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* ── Pulse animation ─────────────────────────────────────────── */
+    @keyframes pulse { 0%,100%{ opacity:1 } 50%{ opacity:.5 } }
+    .pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+    @keyframes spin { to{ transform: rotate(360deg) } }
+    .spin { display: inline-block; animation: spin .8s linear infinite; }
+
+    /* ── Toast ───────────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 20px;
+      font-size: .85rem; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+      z-index: 999; opacity: 0;
+      transition: opacity .3s;
+      pointer-events: none;
+    }
+
+    #toast.show { opacity: 1; }
+
+    /* ── Visibility helpers ──────────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      header { padding: 16px 20px; }
+      main { padding: 20px 16px 60px; }
+      .stepper { gap: 0; padding: 24px 16px 0; }
+      .step-label { font-size: .65rem; }
+      .stat-grid { grid-template-columns: repeat(2,1fr); }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">🏓</div>
+  <div>
+    <h1>PickleballTracking</h1>
+    <p>AI-powered ball tracking &amp; IN/OUT detection</p>
+  </div>
+  <span class="badge">YOLOv8 + Kalman Filter</span>
+</header>
+
+<!-- ── Stepper ── -->
+<div class="stepper" id="stepper">
+  <div class="step active" id="step-1">
+    <div class="step-icon">1</div>
+    <div class="step-label">Upload Video</div>
+  </div>
+  <div class="step" id="step-2">
+    <div class="step-icon">2</div>
+    <div class="step-label">Select Court</div>
+  </div>
+  <div class="step" id="step-3">
+    <div class="step-icon">3</div>
+    <div class="step-label">Processing</div>
+  </div>
+  <div class="step" id="step-4">
+    <div class="step-icon">✓</div>
+    <div class="step-label">Results</div>
+  </div>
+</div>
+
+<!-- ── Main ── -->
+<main>
+
+  <!-- STEP 1: Upload -->
+  <div class="card" id="panel-upload">
+    <h2><span class="icon">📹</span> Upload Video</h2>
+    <p class="sub">Drag &amp; drop hoặc click để chọn video pickleball cần phân tích.</p>
+
+    <div id="drop-zone">
+      <div class="dz-icon">🎬</div>
+      <h3>Kéo thả video vào đây</h3>
+      <p>hoặc click để chọn file</p>
+      <div class="formats">
+        <span class="fmt-chip">MP4</span>
+        <span class="fmt-chip">AVI</span>
+        <span class="fmt-chip">MOV</span>
+        <span class="fmt-chip">MKV</span>
+        <span class="fmt-chip">M4V</span>
+      </div>
+      <input type="file" id="file-input" accept="video/*" />
+    </div>
+
+    <div id="video-info">
+      <div style="flex:1">
+        <div class="vi-name" id="vi-filename">filename.mp4</div>
+        <div class="vi-meta" id="vi-meta">–</div>
+        <div class="upload-bar">
+          <div class="upload-bar-fill" id="upload-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: Court Selection -->
+  <div class="card hidden" id="panel-court">
+    <h2><span class="icon">🏟️</span> Chọn Vùng Sân</h2>
+    <p class="sub">Click chuột trái để đánh dấu <strong>4 góc sân</strong> theo thứ tự (tối thiểu 3 điểm). Nhấn <kbd style="background:var(--surface2);border:1px solid var(--border);padding:1px 6px;border-radius:4px;font-size:.8em">Undo</kbd> để xóa điểm cuối.</p>
+
+    <div style="text-align:center;">
+      <div id="court-wrap">
+        <canvas id="court-canvas"></canvas>
+      </div>
+    </div>
+
+    <div class="court-hint">
+      <span>💡</span>
+      <span>Click theo chiều kim đồng hồ bắt đầu từ góc trên-trái sẽ cho kết quả tốt nhất.</span>
+    </div>
+
+    <div class="dot-list" id="dot-list"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-danger" id="btn-undo" onclick="undoPoint()">↩ Undo</button>
+      <button class="btn btn-outline" id="btn-clear" onclick="clearPoints()">🗑 Clear All</button>
+      <button class="btn btn-primary" id="btn-start-track" onclick="startTracking()" disabled>
+        🚀 Bắt Đầu Tracking
+      </button>
+    </div>
+  </div>
+
+  <!-- STEP 3: Processing -->
+  <div class="card hidden" id="panel-progress">
+    <h2><span class="icon">⚙️</span> Đang Xử Lý</h2>
+    <p class="sub">Model đang phân tích video. Quá trình có thể mất vài phút tùy độ dài video.</p>
+
+    <div class="prog-ring-wrap">
+      <div class="ring-container">
+        <svg class="ring-svg" width="100" height="100" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#00e676"/>
+              <stop offset="100%" style="stop-color:#00c853"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="50" cy="50" r="45"/>
+          <circle class="ring-fill" id="ring-fill" cx="50" cy="50" r="45"/>
+        </svg>
+        <div class="ring-label" id="pct-label">0%</div>
+      </div>
+
+      <div class="prog-stats" style="flex:1">
+        <div class="prog-msg" id="prog-msg">Đang khởi động…</div>
+        <div class="prog-bar-wrap">
+          <div class="prog-bar-fill" id="prog-bar"></div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-box">
+            <div class="stat-val" id="stat-frames">0</div>
+            <div class="stat-lbl">Frames</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-total">–</div>
+            <div class="stat-lbl">Total</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-eta">–</div>
+            <div class="stat-lbl">Trạng thái</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4: Results -->
+  <div class="card hidden" id="panel-results">
+    <h2><span class="icon">🎉</span> Kết Quả</h2>
+    <p class="sub">Video đã được xử lý. Xem lại và tải xuống kết quả.</p>
+
+    <video id="result-video" controls playsinline>
+      <source id="result-src" src="" type="video/mp4" />
+    </video>
+
+    <div class="result-actions">
+      <a class="dl-btn" id="btn-dl-video" href="#" target="_blank">
+        ⬇ Tải Video (MP4)
+      </a>
+      <a class="dl-btn" id="btn-dl-csv" href="#" target="_blank">
+        📊 Tải Dữ Liệu (CSV)
+      </a>
+      <button class="btn btn-outline" onclick="resetAll()">
+        🔄 Phân tích video mới
+      </button>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Toast ── -->
+<div id="toast"></div>
+
+<!-- ── Scripts ── -->
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let jobId = null;
+let courtPoints = [];          // [[x,y],...]  canvas coordinates
+let imgNatW = 1, imgNatH = 1;  // original video resolution
+let canvasW = 1, canvasH = 1;  // displayed canvas size
+let pollTimer = null;
+let startTime = null;
+
+// Colors for up to 6 court points
+const DOT_COLORS = ['#00e676','#ffe600','#38bdf8','#ff6b6b','#c084fc','#fb923c'];
+
+// ── Utility ──────────────────────────────────────────────────────────────────
+function show(id)  { document.getElementById(id).classList.remove('hidden'); }
+function hide(id)  { document.getElementById(id).classList.add('hidden'); }
+
+function toast(msg, duration=3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function setStep(n) {
+  [1,2,3,4].forEach(i => {
+    const el = document.getElementById(`step-${i}`);
+    el.classList.remove('active','done');
+    if (i < n)  el.classList.add('done');
+    if (i === n) el.classList.add('active');
+  });
+}
+
+// ── Drag & Drop / Upload ──────────────────────────────────────────────────────
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('drag-over');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file || !file.type.startsWith('video/')) {
+    toast('❌ Vui lòng chọn file video hợp lệ');
+    return;
+  }
+
+  const info = document.getElementById('video-info');
+  document.getElementById('vi-filename').textContent = file.name;
+  document.getElementById('vi-meta').textContent =
+    `${(file.size / 1024 / 1024).toFixed(1)} MB`;
+  info.classList.add('show');
+
+  const bar = document.getElementById('upload-bar-fill');
+  bar.style.width = '0';
+
+  // Upload via XHR to track progress
+  const form = new FormData();
+  form.append('video', file);
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/upload');
+
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) {
+      bar.style.width = (e.loaded / e.total * 100) + '%';
+    }
+  };
+
+  xhr.onload = () => {
+    bar.style.width = '100%';
+    if (xhr.status === 200) {
+      const data = JSON.parse(xhr.responseText);
+      jobId  = data.job_id;
+      imgNatW = data.width;
+      imgNatH = data.height;
+      setupCourtCanvas(data.frame, data.width, data.height);
+      setStep(2);
+      show('panel-court');
+      toast('✅ Upload thành công! Hãy chọn 4 góc sân.');
+    } else {
+      const err = JSON.parse(xhr.responseText);
+      toast('❌ Lỗi: ' + (err.error || 'Upload thất bại'));
+    }
+  };
+
+  xhr.onerror = () => toast('❌ Lỗi kết nối khi upload');
+  xhr.send(form);
+}
+
+// ── Court Canvas ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('court-canvas');
+const ctx    = canvas.getContext('2d');
+let   bgImg  = null;
+
+function setupCourtCanvas(base64Frame, natW, natH) {
+  const img = new Image();
+  img.onload = () => {
+    bgImg = img;
+    const maxW = Math.min(900, window.innerWidth - 64);
+    const scale = maxW / natW;
+    canvasW = Math.round(natW * scale);
+    canvasH = Math.round(natH * scale);
+    canvas.width  = canvasW;
+    canvas.height = canvasH;
+    courtPoints = [];
+    renderCanvas();
+  };
+  img.src = 'data:image/jpeg;base64,' + base64Frame;
+}
+
+function renderCanvas() {
+  if (!bgImg) return;
+  ctx.clearRect(0, 0, canvasW, canvasH);
+  ctx.drawImage(bgImg, 0, 0, canvasW, canvasH);
+
+  // Draw polygon lines
+  if (courtPoints.length >= 2) {
+    ctx.beginPath();
+    ctx.moveTo(courtPoints[0][0], courtPoints[0][1]);
+    for (let i = 1; i < courtPoints.length; i++)
+      ctx.lineTo(courtPoints[i][0], courtPoints[i][1]);
+    if (courtPoints.length >= 3) ctx.closePath();
+    ctx.strokeStyle = 'rgba(0,230,118,0.85)';
+    ctx.lineWidth   = 2.5;
+    ctx.setLineDash([6,4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Fill
+    if (courtPoints.length >= 3) {
+      ctx.fillStyle = 'rgba(0,230,118,0.08)';
+      ctx.fill();
+    }
+  }
+
+  // Draw dots
+  courtPoints.forEach(([px, py], i) => {
+    const color = DOT_COLORS[i % DOT_COLORS.length];
+    ctx.beginPath();
+    ctx.arc(px, py, 9, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#000';
+    ctx.font      = 'bold 11px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(i + 1, px, py);
+  });
+}
+
+canvas.addEventListener('click', e => {
+  if (courtPoints.length >= 4) {
+    toast('Đã đủ 4 điểm. Xóa bớt nếu muốn thay đổi.');
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvasW / rect.width;
+  const sy = canvasH / rect.height;
+  const x = Math.round((e.clientX - rect.left) * sx);
+  const y = Math.round((e.clientY - rect.top) * sy);
+  courtPoints.push([x, y]);
+  renderCanvas();
+  updateDotList();
+  document.getElementById('btn-start-track').disabled = (courtPoints.length < 3);
+});
+
+function updateDotList() {
+  const list = document.getElementById('dot-list');
+  list.innerHTML = courtPoints.map((p, i) => `
+    <div class="dot-chip">
+      <span class="dot-color" style="background:${DOT_COLORS[i % DOT_COLORS.length]}"></span>
+      P${i+1}: (${p[0]}, ${p[1]})
+    </div>`
+  ).join('');
+}
+
+function undoPoint() {
+  if (courtPoints.length === 0) return;
+  courtPoints.pop();
+  renderCanvas();
+  updateDotList();
+  document.getElementById('btn-start-track').disabled = (courtPoints.length < 3);
+}
+
+function clearPoints() {
+  courtPoints = [];
+  renderCanvas();
+  updateDotList();
+  document.getElementById('btn-start-track').disabled = true;
+}
+
+// Convert canvas coords → original video coords
+function canvasToVideo(pts) {
+  const sx = imgNatW / canvasW;
+  const sy = imgNatH / canvasH;
+  return pts.map(([x, y]) => [Math.round(x * sx), Math.round(y * sy)]);
+}
+
+// ── Start Tracking ────────────────────────────────────────────────────────────
+async function startTracking() {
+  if (!jobId || courtPoints.length < 3) {
+    toast('❌ Cần ít nhất 3 điểm sân!');
+    return;
+  }
+
+  const videoPts = canvasToVideo(courtPoints);
+
+  const res = await fetch('/track', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId, points: videoPts }),
+  });
+
+  const data = await res.json();
+  if (res.ok) {
+    setStep(3);
+    show('panel-progress');
+    hide('panel-court');
+    startTime = Date.now();
+    startPolling();
+    toast('🚀 Model đang chạy…');
+  } else {
+    toast('❌ ' + (data.error || 'Lỗi khởi động'));
+  }
+}
+
+// ── Progress Polling ──────────────────────────────────────────────────────────
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollStatus, 1500);
+}
+
+async function pollStatus() {
+  if (!jobId) return;
+  try {
+    const res  = await fetch(`/status/${jobId}`);
+    const data = await res.json();
+
+    const pct  = data.percent || 0;
+    const circ = 283; // 2π * 45
+
+    // Ring
+    document.getElementById('ring-fill').style.strokeDashoffset =
+      circ - (circ * pct / 100);
+    document.getElementById('pct-label').textContent = pct + '%';
+
+    // Bar
+    document.getElementById('prog-bar').style.width = pct + '%';
+
+    // Text stats
+    document.getElementById('prog-msg').textContent     = data.message || '…';
+    document.getElementById('stat-frames').textContent  = data.progress || 0;
+    document.getElementById('stat-total').textContent   = data.total   || '–';
+    document.getElementById('stat-eta').textContent     = data.status === 'running' ? '🔄' : data.status;
+
+    if (data.status === 'done') {
+      clearInterval(pollTimer);
+      showResults();
+    } else if (data.status === 'error') {
+      clearInterval(pollTimer);
+      toast('❌ Lỗi: ' + data.message, 6000);
+    }
+  } catch(e) {
+    // network error, keep trying
+  }
+}
+
+// ── Show Results ──────────────────────────────────────────────────────────────
+function showResults() {
+  setStep(4);
+  show('panel-results');
+  hide('panel-progress');
+
+  const videoEl = document.getElementById('result-video');
+  const src     = document.getElementById('result-src');
+  src.src = `/download/video/${jobId}?t=${Date.now()}`;
+  videoEl.load();
+
+  document.getElementById('btn-dl-video').href = `/download/video/${jobId}`;
+  document.getElementById('btn-dl-csv').href   = `/download/csv/${jobId}`;
+
+  toast('🎉 Tracking hoàn tất! Đang tải kết quả…', 5000);
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────────
+function resetAll() {
+  jobId        = null;
+  courtPoints  = [];
+  if (pollTimer) clearInterval(pollTimer);
+
+  // Reset UI
+  [1,2,3,4].forEach(i => {
+    const s = document.getElementById(`step-${i}`);
+    s.classList.remove('active','done');
+  });
+  document.getElementById('step-1').classList.add('active');
+
+  hide('panel-court');
+  hide('panel-progress');
+  hide('panel-results');
+  document.getElementById('video-info').classList.remove('show');
+  document.getElementById('upload-bar-fill').style.width = '0';
+  document.getElementById('file-input').value = '';
+  document.getElementById('pct-label').textContent = '0%';
+  document.getElementById('prog-bar').style.width = '0';
+  document.getElementById('ring-fill').style.strokeDashoffset = 283;
+
+  const videoEl = document.getElementById('result-video');
+  videoEl.pause();
+  document.getElementById('result-src').src = '';
+  videoEl.load();
+}
+</script>
+</body>
+</html>
