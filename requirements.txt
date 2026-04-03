@@ -7,3 +7,4 @@ pandas>=2.0.0
 matplotlib>=3.7.0
 flask>=3.0.0
 imageio-ffmpeg>=0.4.9
+gunicorn>=21.2.0

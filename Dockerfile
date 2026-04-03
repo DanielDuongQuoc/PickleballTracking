@@ -60,4 +60,13 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5000/ || exit 1
 
 # ── Entrypoint ───────────────────────────────────────────────
-CMD ["python", "app.py"]
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:5000", \
+     "--workers", "1", \
+     "--threads", "4", \
+     "--timeout", "300", \
+     "--graceful-timeout", "60", \
+     "--keep-alive", "5", \
+     "--limit-request-line", "0", \
+     "--limit-request-field_size", "0", \
+     "app:app"]
